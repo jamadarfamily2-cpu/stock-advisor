@@ -185,9 +185,9 @@ ETFs:
 ⚠️ सावधगिरी: [1-2 lines risk warning in Marathi]"""
 
     models = [
-        "deepseek/deepseek-r1-0528:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
         "meta-llama/llama-3.1-8b-instruct:free",
-        "google/gemma-3-4b-it:free",
+        "mistralai/mistral-7b-instruct:free",
     ]
 
     for model in models:
