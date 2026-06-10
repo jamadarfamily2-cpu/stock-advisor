@@ -244,15 +244,16 @@ def get_chat_response(user_question, investment_amount, nifty_price, nifty_chang
     # Build messages with history
     messages = [
         {"role": "system", "content": f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. 
-फक्त मराठीत उत्तर द्या.
+फक्त मराठीत उत्तर द्या. उत्तर concise आणि specific ठेवा - जास्त repeat करू नका.
 गुंतवणूकदाराची रक्कम: ₹{investment_amount:,}
 Nifty 50: ₹{nifty_price} ({nifty_change}%)
 {stock_data_text}
-प्रत्येक उत्तरात exact numbers द्या - buy price, target, stop loss, quantity."""}
+प्रत्येक उत्तरात exact numbers द्या - buy price, target, stop loss, quantity.
+उत्तर जास्तीत जास्त 150 words मध्ये द्या."""}
     ]
 
-    # Add chat history
-    for msg in chat_history[-6:]:  # Last 6 messages for context
+    # Add only last 4 messages for context (avoid repetition)
+    for msg in chat_history[-4:]:
         messages.append(msg)
 
     # Add current question
