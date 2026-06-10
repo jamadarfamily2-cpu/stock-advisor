@@ -124,7 +124,30 @@ def get_nifty_data():
         pass
     return None, None
 
-def get_ai_recommendation(investment_amount, top_stocks, etf_data, nifty_price, nifty_change, instrument_pref, risk_level):
+def call_groq(messages):
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": messages,
+                "max_tokens": 2000,
+                "temperature": 0.3,
+            },
+            timeout=60
+        )
+        result = response.json()
+        if "choices" in result:
+            return result["choices"][0]["message"]["content"]
+        return f"Error: {result}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def get_main_recommendation(investment_amount, top_stocks, etf_data, nifty_price, nifty_change, instrument_pref, risk_level):
     stocks_text = ""
     for s in top_stocks[:5]:
         stocks_text += f"- {s['symbol'].replace('.NS','')}: ₹{s['price']}, बदल {s['change_pct']}%, RSI {s['rsi']}, Score {s['score']}, Signals: {', '.join(s['signals'][:3])}\n"
@@ -134,14 +157,14 @@ def get_ai_recommendation(investment_amount, top_stocks, etf_data, nifty_price, 
         if data:
             etf_text += f"- {name}: ₹{data['price']}, बदल {data['change_pct']}%, RSI {data['rsi']}\n"
 
-    trend = "तेजी (Bullish)" if nifty_change and nifty_change > 0.3 else "मंदी (Bearish)" if nifty_change and nifty_change < -0.3 else "तटस्थ (Sideways)"
+    trend = "तेजी" if nifty_change and nifty_change > 0.3 else "मंदी" if nifty_change and nifty_change < -0.3 else "तटस्थ"
 
     prompt = f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. खालील data वापरून आजचा एकच सर्वोत्तम intraday trade सुचवा. फक्त मराठीत उत्तर द्या.
 
 बाजार: Nifty 50 = ₹{nifty_price} ({nifty_change}%), कल = {trend}
 गुंतवणूकदार: रक्कम = ₹{investment_amount:,}, जोखीम = {risk_level}, प्राधान्य = {instrument_pref}
 
-Top Stocks (Nifty 50 + Bank Nifty स्कॅन):
+Top Stocks:
 {stocks_text}
 ETFs:
 {etf_text}
@@ -149,7 +172,7 @@ ETFs:
 खालील exact format मध्ये मराठीत उत्तर द्या:
 
 📊 आजचे बाजाराचे विश्लेषण:
-[2-3 वाक्ये - आज बाजार कसा आहे]
+[2-3 वाक्ये]
 
 🎯 आजची सर्वोत्तम संधी: [STOCK NAME]
 प्रकार: [Stock Intraday / ETF]
@@ -165,43 +188,77 @@ ETFs:
 - जास्तीत जास्त तोटा: ₹[number]
 
 📈 तांत्रिक कारणे:
-• RSI: [explain in Marathi]
-• MACD: [explain in Marathi]
-• Volume: [explain in Marathi]
-• Support: [explain in Marathi]
+• RSI: [explain]
+• MACD: [explain]
+• Volume: [explain]
+• Support: [explain]
 
 ⏰ वेळ:
-- प्रवेश वेळ: [best time]
-- बाहेर पडा: [exit time]
+- प्रवेश वेळ: [time]
+- बाहेर पडा: [time]
 
-⚠️ सावधगिरी: [risk warning in Marathi]"""
+⚠️ सावधगिरी: [warning]"""
 
-    try:
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "llama-3.1-8b-instant",
-                "messages": [
-                    {"role": "system", "content": "You are an expert Indian stock market analyst. Always respond in Marathi language only. Give specific actionable trade recommendations with exact numbers."},
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.3,
-            },
-            timeout=60
-        )
-        result = response.json()
-        if "choices" in result:
-            text = result["choices"][0]["message"]["content"]
-            if text and len(text) > 50:
-                return text, "Groq Llama 3.1"
-        return f"Error: {result}", "error"
-    except Exception as e:
-        return f"Error: {str(e)}", "error"
+    messages = [
+        {"role": "system", "content": "You are an expert Indian stock market analyst. Always respond in Marathi language only."},
+        {"role": "user", "content": prompt}
+    ]
+    return call_groq(messages)
+
+def get_chat_response(user_question, investment_amount, nifty_price, nifty_change, chat_history):
+    # Try to extract stock symbol from question
+    question_upper = user_question.upper()
+    stock_data_text = ""
+
+    # Check if user mentioned a known stock
+    common_stocks = {
+        "RELIANCE": "RELIANCE.NS", "TCS": "TCS.NS", "HDFCBANK": "HDFCBANK.NS",
+        "ICICIBANK": "ICICIBANK.NS", "INFY": "INFY.NS", "SBIN": "SBIN.NS",
+        "NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK", "KOTAKBANK": "KOTAKBANK.NS",
+        "AXISBANK": "AXISBANK.NS", "LT": "LT.NS", "TITAN": "TITAN.NS",
+        "WIPRO": "WIPRO.NS", "BAJFINANCE": "BAJFINANCE.NS", "MARUTI": "MARUTI.NS",
+        "TATAMOTORS": "TATAMOTORS.NS", "ONGC": "ONGC.NS", "NTPC": "NTPC.NS",
+        "SHRIRAMFIN": "SHRIRAMFIN.NS", "HINDALCO": "HINDALCO.NS",
+        "BAJAJFINSV": "BAJAJFINSV.NS", "INDUSINDBK": "INDUSINDBK.NS",
+        "HCLTECH": "HCLTECH.NS", "SUNPHARMA": "SUNPHARMA.NS",
+        "BHARTIARTL": "BHARTIARTL.NS", "ITC": "ITC.NS", "M&M": "M&M.NS",
+        "ADANIENT": "ADANIENT.NS", "TATASTEEL": "TATASTEEL.NS",
+    }
+
+    for stock_name, symbol in common_stocks.items():
+        if stock_name in question_upper:
+            data = analyze_stock(symbol)
+            if data:
+                stock_data_text = f"""
+{stock_name} चा live data:
+- किंमत: ₹{data['price']}
+- बदल: {data['change_pct']}%
+- RSI: {data['rsi']}
+- MACD: {'Bullish' if data['macd'] > data['macd_signal'] else 'Bearish'}
+- Volume: {data['vol_surge']}x average
+- Score: {data['score']}/10
+- Signals: {', '.join(data['signals'])}
+"""
+            break
+
+    # Build messages with history
+    messages = [
+        {"role": "system", "content": f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. 
+फक्त मराठीत उत्तर द्या.
+गुंतवणूकदाराची रक्कम: ₹{investment_amount:,}
+Nifty 50: ₹{nifty_price} ({nifty_change}%)
+{stock_data_text}
+प्रत्येक उत्तरात exact numbers द्या - buy price, target, stop loss, quantity."""}
+    ]
+
+    # Add chat history
+    for msg in chat_history[-6:]:  # Last 6 messages for context
+        messages.append(msg)
+
+    # Add current question
+    messages.append({"role": "user", "content": user_question})
+
+    return call_groq(messages)
 
 # MAIN UI
 st.title("📈 Shreya's AI Stock Advisor")
@@ -215,6 +272,14 @@ else:
 
 st.divider()
 
+# Initialize session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "nifty_price" not in st.session_state:
+    st.session_state.nifty_price = None
+if "nifty_change" not in st.session_state:
+    st.session_state.nifty_change = None
+
 with st.sidebar:
     st.header("⚙️ तुमची माहिती")
     investment_amount = st.number_input("💰 आजची गुंतवणूक रक्कम (₹)", min_value=1000, max_value=1000000, value=10000, step=1000)
@@ -223,10 +288,17 @@ with st.sidebar:
     st.divider()
     st.info(f"**Investment:** ₹{investment_amount:,}\n\n**Type:** {instrument_pref}\n\n**Risk:** {risk_level}")
     analyze_btn = st.button("🔍 आजचे विश्लेषण सुरू करा", type="primary", use_container_width=True)
+    if st.button("🗑️ Chat साफ करा", use_container_width=True):
+        st.session_state.chat_history = []
+        st.rerun()
 
+# ── MAIN SCAN SECTION ──
 if analyze_btn:
     st.subheader("📊 Step 1: बाजार स्थिती तपासत आहे...")
     nifty_price, nifty_change = get_nifty_data()
+    st.session_state.nifty_price = nifty_price
+    st.session_state.nifty_change = nifty_change
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Nifty 50", f"₹{nifty_price:,}" if nifty_price else "N/A", f"{nifty_change}%" if nifty_change else "")
@@ -271,7 +343,7 @@ if analyze_btn:
     status_text.text("Groq AI विश्लेषण करत आहे...")
 
     with st.spinner("Groq AI विश्लेषण करत आहे... (10-20 seconds)"):
-        recommendation, model_used = get_ai_recommendation(
+        recommendation = get_main_recommendation(
             investment_amount, top_stocks, etf_data,
             nifty_price, nifty_change, instrument_pref, risk_level
         )
@@ -281,25 +353,52 @@ if analyze_btn:
 
     st.divider()
     st.subheader("🎯 AI चा आजचा सल्ला")
-    st.caption(f"Powered by: {model_used}")
     st.markdown(
         f'<div style="background:#f0f8f0;padding:24px;border-radius:12px;border-left:5px solid #28a745;font-size:16px;line-height:2.2;">{recommendation.replace(chr(10), "<br>")}</div>',
         unsafe_allow_html=True
     )
-
-    st.divider()
-    st.warning("⚠️ हा AI सल्ला फक्त माहितीसाठी आहे. गुंतवणूक करताना स्वतःचा विवेक वापरा. SEBI registered advisor चा सल्ला घ्या.")
+    st.warning("⚠️ हा AI सल्ला फक्त माहितीसाठी आहे. SEBI registered advisor चा सल्ला घ्या.")
     st.caption(f"विश्लेषण वेळ: {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d %B %Y, %I:%M %p IST')}")
 
 else:
-    st.info("👈 डाव्या बाजूला रक्कम टाका आणि **'आजचे विश्लेषण सुरू करा'** दाबा!\n\nAI Nifty 50 + Bank Nifty स्कॅन करून आजची एकच सर्वोत्तम संधी सांगेल — exact buy, target, stop loss सह!")
-    st.markdown("""
-    | | वैशिष्ट्य |
-    |---|---|
-    | 🔍 | Nifty 50 + Bank Nifty संपूर्ण स्कॅन |
-    | 📊 | RSI, MACD, Bollinger, Volume analysis |
-    | 🏆 | Score-based best opportunity |
-    | 💰 | तुमच्या रकमेनुसार exact trade plan |
-    | 🗣️ | मराठीत संपूर्ण सल्ला |
-    | ⚡ | Powered by Groq AI (Super Fast!) |
-    """)
+    st.info("👈 डाव्या बाजूला रक्कम टाका आणि **'आजचे विश्लेषण सुरू करा'** दाबा!")
+
+# ── CHAT SECTION ──
+st.divider()
+st.subheader("💬 Stock विचारा — कोणताही प्रश्न")
+st.caption("उदा: 'RELIANCE F&O घेऊ का?', 'HDFCBANK आज कसा आहे?', 'आज कोणता sector strong आहे?'")
+
+# Show chat history
+for msg in st.session_state.chat_history:
+    if msg["role"] == "user":
+        with st.chat_message("user"):
+            st.write(msg["content"])
+    elif msg["role"] == "assistant":
+        with st.chat_message("assistant"):
+            st.markdown(msg["content"])
+
+# Chat input
+user_input = st.chat_input("तुमचा प्रश्न मराठीत किंवा English मध्ये विचारा...")
+
+if user_input:
+    # Show user message
+    with st.chat_message("user"):
+        st.write(user_input)
+
+    # Add to history
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+
+    # Get AI response
+    with st.chat_message("assistant"):
+        with st.spinner("विचार करत आहे..."):
+            nifty_p = st.session_state.nifty_price or 24000
+            nifty_c = st.session_state.nifty_change or 0
+            response = get_chat_response(
+                user_input, investment_amount,
+                nifty_p, nifty_c,
+                st.session_state.chat_history[:-1]
+            )
+        st.markdown(response)
+
+    # Add assistant response to history
+    st.session_state.chat_history.append({"role": "assistant", "content": response})
