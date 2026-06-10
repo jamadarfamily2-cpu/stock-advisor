@@ -10,7 +10,7 @@ import json
 # CONFIG
 st.set_page_config(page_title="Shreya Stock Advisor", page_icon="📈", layout="wide")
 
-OPENROUTER_API_KEY = "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"
+GEMINI_API_KEY = "AQ.Ab8RN6Jn-lUCRO0ZsRS3DsaLaPudm_72XVQsyycu3kcN92Ty6Q"
 
 # STOCK UNIVERSE
 NIFTY50 = [
@@ -38,13 +38,10 @@ ETFS = {
     "IT BeES": "ITBEES.NS",
 }
 
-# HELPERS
 def is_market_open():
     ist = pytz.timezone("Asia/Kolkata")
     now = datetime.now(ist)
-    market_open = time(9, 15)
-    market_close = time(15, 30)
-    return (now.weekday() < 5 and market_open <= now.time() <= market_close), now
+    return (now.weekday() < 5 and time(9,15) <= now.time() <= time(15,30)), now
 
 def compute_rsi(series, period=14):
     delta = series.diff()
@@ -127,40 +124,10 @@ def get_nifty_data():
         pass
     return None, None
 
-def call_openrouter(prompt, model):
-    try:
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://shreya-stock-advisor.streamlit.app",
-                "X-Title": "Shreya Stock Advisor",
-            },
-            data=json.dumps({
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": "You are an expert Indian stock market analyst. Always respond in Marathi language only. Give specific actionable trade recommendations with exact numbers."},
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.3,
-            }),
-            timeout=60
-        )
-        result = response.json()
-        if "choices" in result and len(result["choices"]) > 0:
-            text = result["choices"][0]["message"]["content"]
-            if text and len(text) > 50:
-                return text
-        return None
-    except Exception:
-        return None
-
 def get_ai_recommendation(investment_amount, top_stocks, etf_data, nifty_price, nifty_change, instrument_pref, risk_level):
     stocks_text = ""
     for s in top_stocks[:5]:
-        stocks_text += f"- {s['symbol'].replace('.NS','')}: किंमत ₹{s['price']}, बदल {s['change_pct']}%, RSI {s['rsi']}, Score {s['score']}, Signals: {', '.join(s['signals'][:3])}\n"
+        stocks_text += f"- {s['symbol'].replace('.NS','')}: ₹{s['price']}, बदल {s['change_pct']}%, RSI {s['rsi']}, Score {s['score']}, Signals: {', '.join(s['signals'][:3])}\n"
 
     etf_text = ""
     for name, data in etf_data.items():
@@ -169,66 +136,65 @@ def get_ai_recommendation(investment_amount, top_stocks, etf_data, nifty_price, 
 
     trend = "तेजी (Bullish)" if nifty_change and nifty_change > 0.3 else "मंदी (Bearish)" if nifty_change and nifty_change < -0.3 else "तटस्थ (Sideways)"
 
-    prompt = f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. खालील data वापरून आजचा एकच सर्वोत्तम intraday trade सुचवा.
+    prompt = f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. खालील data वापरून आजचा एकच सर्वोत्तम intraday trade सुचवा. फक्त मराठीत उत्तर द्या.
 
-बाजार माहिती:
-- Nifty 50: ₹{nifty_price} ({nifty_change}% आज)
-- बाजार कल: {trend}
+बाजार: Nifty 50 = ₹{nifty_price} ({nifty_change}%), कल = {trend}
+गुंतवणूकदार: रक्कम = ₹{investment_amount:,}, जोखीम = {risk_level}, प्राधान्य = {instrument_pref}
 
-गुंतवणूकदार:
-- रक्कम: ₹{investment_amount:,}
-- जोखीम: {risk_level}
-- प्राधान्य: {instrument_pref}
-
-आजचे Top Stocks (Nifty 50 + Bank Nifty स्कॅन):
+Top Stocks:
 {stocks_text}
-
-ETF data:
+ETFs:
 {etf_text}
 
-खालील format मध्ये मराठीत उत्तर द्या:
+खालील exact format मध्ये मराठीत उत्तर द्या:
 
 📊 आजचे बाजाराचे विश्लेषण:
-[आज बाजार कसा आहे आणि का - 2-3 वाक्ये]
+[2-3 वाक्ये]
 
 🎯 आजची सर्वोत्तम संधी: [STOCK NAME]
-प्रकार: [Stock Intraday]
+प्रकार: [Stock Intraday / ETF]
 
 💰 गुंतवणूक योजना (₹{investment_amount:,} साठी):
-- खरेदी किंमत: ₹[exact number]
-- प्रमाण (Quantity): [exact number] shares
-- एकूण गुंतवणूक: ₹[total]
-- लक्ष्य किंमत 1: ₹[target1]
-- लक्ष्य किंमत 2: ₹[target2]
-- स्टॉप लॉस: ₹[stoploss]
-- अपेक्षित नफा: ₹[profit at T1]
-- जास्तीत जास्त तोटा: ₹[max loss]
+- खरेदी किंमत: ₹[number]
+- प्रमाण (Quantity): [number] shares
+- एकूण गुंतवणूक: ₹[number]
+- लक्ष्य किंमत 1: ₹[number]
+- लक्ष्य किंमत 2: ₹[number]
+- स्टॉप लॉस: ₹[number]
+- अपेक्षित नफा: ₹[number]
+- जास्तीत जास्त तोटा: ₹[number]
 
 📈 तांत्रिक कारणे:
-• RSI: [मराठीत explain]
-• MACD: [मराठीत explain]
-• Volume: [मराठीत explain]
-• Support: [मराठीत explain]
+• RSI: [explain]
+• MACD: [explain]
+• Volume: [explain]
+• Support/Resistance: [explain]
 
 ⏰ वेळ:
-- प्रवेश वेळ: [best entry time]
-- बाहेर पडण्याची वेळ: [exit time]
+- प्रवेश वेळ: [time]
+- बाहेर पडण्याची वेळ: [time]
 
-⚠️ सावधगिरी: [risk warning मराठीत]"""
+⚠️ सावधगिरी: [warning]"""
 
-    models = [
-        "meta-llama/llama-3.1-8b-instruct:free",
-        "mistralai/mistral-7b-instruct:free",
-        "google/gemma-3-4b-it:free",
-        "microsoft/phi-3-mini-128k-instruct:free",
-    ]
-
-    for model in models:
-        result = call_openrouter(prompt, model)
-        if result:
-            return result, model
-
-    return "सर्व AI models अनुपलब्ध आहेत. OpenRouter account मध्ये credits check करा.", "none"
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        response = requests.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            data=json.dumps({
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2000}
+            }),
+            timeout=60
+        )
+        result = response.json()
+        if "candidates" in result:
+            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            if text and len(text) > 50:
+                return text, "Gemini 1.5 Flash"
+        return f"Error: {result}", "error"
+    except Exception as e:
+        return f"Error: {str(e)}", "error"
 
 # MAIN UI
 st.title("📈 Shreya's AI Stock Advisor")
@@ -290,15 +256,14 @@ if analyze_btn:
         cols = st.columns(5)
         for i, stock in enumerate(top5):
             with cols[i]:
-                name = stock["symbol"].replace(".NS", "")
-                st.metric(label=name, value=f"₹{stock['price']}", delta=f"{stock['change_pct']}%")
+                st.metric(label=stock["symbol"].replace(".NS",""), value=f"₹{stock['price']}", delta=f"{stock['change_pct']}%")
                 st.caption(f"RSI: {stock['rsi']} | Score: {stock['score']}")
 
     st.subheader("🤖 Step 3: AI सल्ला तयार होत आहे...")
     progress_bar.progress(0.9)
-    status_text.text("AI विश्लेषण करत आहे... थोडं wait करा...")
+    status_text.text("Gemini AI विश्लेषण करत आहे...")
 
-    with st.spinner("AI विश्लेषण करत आहे... (30-60 seconds)"):
+    with st.spinner("Gemini AI विश्लेषण करत आहे... (15-30 seconds)"):
         recommendation, model_used = get_ai_recommendation(
             investment_amount, top_stocks, etf_data,
             nifty_price, nifty_change, instrument_pref, risk_level
@@ -309,7 +274,7 @@ if analyze_btn:
 
     st.divider()
     st.subheader("🎯 AI चा आजचा सल्ला")
-    st.caption(f"Model: {model_used}")
+    st.caption(f"Powered by: {model_used}")
     st.markdown(
         f'<div style="background:#f0f8f0;padding:24px;border-radius:12px;border-left:5px solid #28a745;font-size:16px;line-height:2.2;">{recommendation.replace(chr(10), "<br>")}</div>',
         unsafe_allow_html=True
@@ -320,7 +285,7 @@ if analyze_btn:
     st.caption(f"विश्लेषण वेळ: {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d %B %Y, %I:%M %p IST')}")
 
 else:
-    st.info("👈 डाव्या बाजूला रक्कम टाका आणि **'आजचे विश्लेषण सुरू करा'** दाबा!\n\nAI Nifty 50 + Bank Nifty स्कॅन करून आजची एकच सर्वोत्तम संधी सांगेल — exact buy, target, stop loss सह!")
+    st.info("👈 डाव्या बाजूला रक्कम टाका आणि **'आजचे विश्लेषण सुरू करा'** दाबा!")
     st.markdown("""
     | | वैशिष्ट्य |
     |---|---|
@@ -329,4 +294,5 @@ else:
     | 🏆 | Score-based best opportunity |
     | 💰 | तुमच्या रकमेनुसार exact trade plan |
     | 🗣️ | मराठीत संपूर्ण सल्ला |
+    | 🤖 | Powered by Google Gemini AI |
     """)
