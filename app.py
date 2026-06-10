@@ -10,7 +10,7 @@ import json
 # CONFIG
 st.set_page_config(page_title="Shreya Stock Advisor", page_icon="📈", layout="wide")
 
-GEMINI_API_KEY = "AQ.Ab8RN6Jn-lUCRO0ZsRS3DsaLaPudm_72XVQsyycu3kcN92Ty6Q"
+GROQ_API_KEY = "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"
 
 # STOCK UNIVERSE
 NIFTY50 = [
@@ -141,7 +141,7 @@ def get_ai_recommendation(investment_amount, top_stocks, etf_data, nifty_price, 
 बाजार: Nifty 50 = ₹{nifty_price} ({nifty_change}%), कल = {trend}
 गुंतवणूकदार: रक्कम = ₹{investment_amount:,}, जोखीम = {risk_level}, प्राधान्य = {instrument_pref}
 
-Top Stocks:
+Top Stocks (Nifty 50 + Bank Nifty स्कॅन):
 {stocks_text}
 ETFs:
 {etf_text}
@@ -149,7 +149,7 @@ ETFs:
 खालील exact format मध्ये मराठीत उत्तर द्या:
 
 📊 आजचे बाजाराचे विश्लेषण:
-[2-3 वाक्ये]
+[2-3 वाक्ये - आज बाजार कसा आहे]
 
 🎯 आजची सर्वोत्तम संधी: [STOCK NAME]
 प्रकार: [Stock Intraday / ETF]
@@ -165,33 +165,40 @@ ETFs:
 - जास्तीत जास्त तोटा: ₹[number]
 
 📈 तांत्रिक कारणे:
-• RSI: [explain]
-• MACD: [explain]
-• Volume: [explain]
-• Support/Resistance: [explain]
+• RSI: [explain in Marathi]
+• MACD: [explain in Marathi]
+• Volume: [explain in Marathi]
+• Support: [explain in Marathi]
 
 ⏰ वेळ:
-- प्रवेश वेळ: [time]
-- बाहेर पडण्याची वेळ: [time]
+- प्रवेश वेळ: [best time]
+- बाहेर पडा: [exit time]
 
-⚠️ सावधगिरी: [warning]"""
+⚠️ सावधगिरी: [risk warning in Marathi]"""
 
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         response = requests.post(
-            url,
-            headers={"Content-Type": "application/json"},
-            data=json.dumps({
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2000}
-            }),
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [
+                    {"role": "system", "content": "You are an expert Indian stock market analyst. Always respond in Marathi language only. Give specific actionable trade recommendations with exact numbers."},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 2000,
+                "temperature": 0.3,
+            },
             timeout=60
         )
         result = response.json()
-        if "candidates" in result:
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
+        if "choices" in result:
+            text = result["choices"][0]["message"]["content"]
             if text and len(text) > 50:
-                return text, "Gemini 1.5 Flash"
+                return text, "Groq Llama 3.1"
         return f"Error: {result}", "error"
     except Exception as e:
         return f"Error: {str(e)}", "error"
@@ -261,9 +268,9 @@ if analyze_btn:
 
     st.subheader("🤖 Step 3: AI सल्ला तयार होत आहे...")
     progress_bar.progress(0.9)
-    status_text.text("Gemini AI विश्लेषण करत आहे...")
+    status_text.text("Groq AI विश्लेषण करत आहे...")
 
-    with st.spinner("Gemini AI विश्लेषण करत आहे... (15-30 seconds)"):
+    with st.spinner("Groq AI विश्लेषण करत आहे... (10-20 seconds)"):
         recommendation, model_used = get_ai_recommendation(
             investment_amount, top_stocks, etf_data,
             nifty_price, nifty_change, instrument_pref, risk_level
@@ -285,7 +292,7 @@ if analyze_btn:
     st.caption(f"विश्लेषण वेळ: {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d %B %Y, %I:%M %p IST')}")
 
 else:
-    st.info("👈 डाव्या बाजूला रक्कम टाका आणि **'आजचे विश्लेषण सुरू करा'** दाबा!")
+    st.info("👈 डाव्या बाजूला रक्कम टाका आणि **'आजचे विश्लेषण सुरू करा'** दाबा!\n\nAI Nifty 50 + Bank Nifty स्कॅन करून आजची एकच सर्वोत्तम संधी सांगेल — exact buy, target, stop loss सह!")
     st.markdown("""
     | | वैशिष्ट्य |
     |---|---|
@@ -294,5 +301,5 @@ else:
     | 🏆 | Score-based best opportunity |
     | 💰 | तुमच्या रकमेनुसार exact trade plan |
     | 🗣️ | मराठीत संपूर्ण सल्ला |
-    | 🤖 | Powered by Google Gemini AI |
+    | ⚡ | Powered by Groq AI (Super Fast!) |
     """)
