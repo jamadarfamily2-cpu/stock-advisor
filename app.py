@@ -159,25 +159,81 @@ def get_main_recommendation(investment_amount, top_stocks, etf_data, nifty_price
 
     trend = "तेजी" if nifty_change and nifty_change > 0.3 else "मंदी" if nifty_change and nifty_change < -0.3 else "तटस्थ"
 
-    prompt = f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. खालील data वापरून आजचा एकच सर्वोत्तम intraday trade सुचवा. फक्त मराठीत उत्तर द्या.
+    # Instrument specific format
+    if "F&O" in instrument_pref:
+        format_instructions = """खालील exact format मध्ये F&O trade सुचवा:
 
-बाजार: Nifty 50 = ₹{nifty_price} ({nifty_change}%), कल = {trend}
-गुंतवणूकदार: रक्कम = ₹{investment_amount:,}, जोखीम = {risk_level}, प्राधान्य = {instrument_pref}
+📊 आजचे बाजाराचे विश्लेषण:
+[2-3 वाक्ये]
 
-Top Stocks:
-{stocks_text}
-ETFs:
-{etf_text}
+🎯 आजची सर्वोत्तम F&O संधी: [NIFTY/BANKNIFTY/STOCK NAME]
+प्रकार: Call Option किंवा Put Option
+Strike Price: ₹[number]
+Expiry: [date]
 
-खालील exact format मध्ये मराठीत उत्तर द्या:
+💰 गुंतवणूक योजना (₹AMOUNT साठी):
+- Option Premium: ₹[number] per share
+- Lot Size: [number] shares per lot
+- Lots घ्यायचे: [number] lots
+- एकूण गुंतवणूक: ₹[number]
+- Target Premium: ₹[number]
+- Stop Loss Premium: ₹[number]
+- अपेक्षित नफा: ₹[number]
+- जास्तीत जास्त तोटा: ₹[number]
+
+📈 तांत्रिक कारणे:
+• RSI: [explain]
+• MACD: [explain]
+• OI/Volume: [explain]
+• Support/Resistance: [explain]
+
+⏰ वेळ:
+- प्रवेश वेळ: [time]
+- बाहेर पडा: [time]
+
+⚠️ सावधगिरी: F&O मध्ये जास्त जोखीम असते. सावधगिरीने invest करा."""
+
+    elif "ETF" in instrument_pref:
+        format_instructions = """खालील exact format मध्ये ETF trade सुचवा:
+
+📊 आजचे बाजाराचे विश्लेषण:
+[2-3 वाक्ये]
+
+🎯 आजची सर्वोत्तम ETF संधी: [ETF NAME]
+प्रकार: ETF Intraday
+
+💰 गुंतवणूक योजना (₹AMOUNT साठी):
+- खरेदी किंमत: ₹[number]
+- प्रमाण (Quantity): [number] units
+- एकूण गुंतवणूक: ₹[number]
+- लक्ष्य किंमत 1: ₹[number]
+- लक्ष्य किंमत 2: ₹[number]
+- स्टॉप लॉस: ₹[number]
+- अपेक्षित नफा: ₹[number]
+- जास्तीत जास्त तोटा: ₹[number]
+
+📈 तांत्रिक कारणे:
+• RSI: [explain]
+• MACD: [explain]
+• Volume: [explain]
+• Trend: [explain]
+
+⏰ वेळ:
+- प्रवेश वेळ: [time]
+- बाहेर पडा: [time]
+
+⚠️ सावधगिरी: [warning]"""
+
+    else:
+        format_instructions = """खालील exact format मध्ये Stock Intraday trade सुचवा:
 
 📊 आजचे बाजाराचे विश्लेषण:
 [2-3 वाक्ये]
 
 🎯 आजची सर्वोत्तम संधी: [STOCK NAME]
-प्रकार: [Stock Intraday / ETF]
+प्रकार: Stock Intraday
 
-💰 गुंतवणूक योजना (₹{investment_amount:,} साठी):
+💰 गुंतवणूक योजना (₹AMOUNT साठी):
 - खरेदी किंमत: ₹[number]
 - प्रमाण (Quantity): [number] shares
 - एकूण गुंतवणूक: ₹[number]
@@ -199,8 +255,22 @@ ETFs:
 
 ⚠️ सावधगिरी: [warning]"""
 
+    format_instructions = format_instructions.replace("₹AMOUNT", f"₹{investment_amount:,}")
+
+    prompt = f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. फक्त मराठीत उत्तर द्या.
+
+बाजार: Nifty 50 = ₹{nifty_price} ({nifty_change}%), कल = {trend}
+गुंतवणूकदार: रक्कम = ₹{investment_amount:,}, जोखीम = {risk_level}, प्राधान्य = {instrument_pref}
+
+Top Stocks (Nifty 50 + Bank Nifty):
+{stocks_text}
+ETFs:
+{etf_text}
+
+{format_instructions}"""
+
     messages = [
-        {"role": "system", "content": "You are an expert Indian stock market analyst. Always respond in Marathi language only."},
+        {"role": "system", "content": "You are an expert Indian stock market analyst. Always respond in Marathi language only. Give specific actionable recommendations with exact numbers."},
         {"role": "user", "content": prompt}
     ]
     return call_groq(messages)
