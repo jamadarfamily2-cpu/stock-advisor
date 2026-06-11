@@ -7,13 +7,12 @@ import pytz
 import requests
 import json
 
-# CONFIG
 st.set_page_config(page_title="Shreya Stock Advisor", page_icon="📈", layout="wide")
 
 GROQ_API_KEY = "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"
 
-# STOCK UNIVERSE
-NIFTY50 = [
+# ── STOCK UNIVERSE ──
+SCAN_STOCKS = [
     "RELIANCE.NS","TCS.NS","HDFCBANK.NS","ICICIBANK.NS","INFY.NS",
     "HINDUNILVR.NS","ITC.NS","SBIN.NS","BHARTIARTL.NS","KOTAKBANK.NS",
     "LT.NS","AXISBANK.NS","ASIANPAINT.NS","MARUTI.NS","SUNPHARMA.NS",
@@ -23,24 +22,49 @@ NIFTY50 = [
     "BAJAJFINSV.NS","BPCL.NS","BRITANNIA.NS","CIPLA.NS","COALINDIA.NS",
     "DIVISLAB.NS","DRREDDY.NS","EICHERMOT.NS","GRASIM.NS","HDFCLIFE.NS",
     "HEROMOTOCO.NS","HINDALCO.NS","INDUSINDBK.NS","SBILIFE.NS","SHRIRAMFIN.NS",
-    "TATACONSUM.NS","UPL.NS","VEDL.NS","BAJAJ-AUTO.NS","M&M.NS"
-]
-
-BANK_NIFTY = [
+    "TATACONSUM.NS","VEDL.NS","BAJAJ-AUTO.NS","M&M.NS",
     "HDFCBANK.NS","ICICIBANK.NS","SBIN.NS","KOTAKBANK.NS","AXISBANK.NS",
-    "INDUSINDBK.NS","BANKBARODA.NS","FEDERALBNK.NS","IDFCFIRSTB.NS","AUBANK.NS"
+    "INDUSINDBK.NS","BANKBARODA.NS","FEDERALBNK.NS","IDFCFIRSTB.NS","AUBANK.NS",
+    "COLPAL.NS","PIDILITIND.NS","HAVELLS.NS","VOLTAS.NS","TRENT.NS",
+    "ZOMATO.NS","IRCTC.NS","APOLLOHOSP.NS","LICI.NS","RVNL.NS",
+    "IRFC.NS","PFC.NS","RECLTD.NS","POLYCAB.NS","DMART.NS",
 ]
 
-ETFS = {
-    "Nifty BeES": "NIFTYBEES.NS",
-    "Bank BeES": "BANKBEES.NS",
-    "Gold BeES": "GOLDBEES.NS",
-    "IT BeES": "ITBEES.NS",
+STOCK_MAP = {
+    "RELIANCE": "RELIANCE.NS", "TCS": "TCS.NS", "HDFCBANK": "HDFCBANK.NS",
+    "ICICIBANK": "ICICIBANK.NS", "INFY": "INFY.NS", "SBIN": "SBIN.NS",
+    "NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK", "KOTAKBANK": "KOTAKBANK.NS",
+    "AXISBANK": "AXISBANK.NS", "LT": "LT.NS", "TITAN": "TITAN.NS",
+    "WIPRO": "WIPRO.NS", "BAJFINANCE": "BAJFINANCE.NS", "MARUTI": "MARUTI.NS",
+    "TATAMOTORS": "TATAMOTORS.NS", "ONGC": "ONGC.NS", "NTPC": "NTPC.NS",
+    "SHRIRAMFIN": "SHRIRAMFIN.NS", "HINDALCO": "HINDALCO.NS",
+    "BAJAJFINSV": "BAJAJFINSV.NS", "INDUSINDBK": "INDUSINDBK.NS",
+    "HCLTECH": "HCLTECH.NS", "SUNPHARMA": "SUNPHARMA.NS",
+    "BHARTIARTL": "BHARTIARTL.NS", "ITC": "ITC.NS", "M&M": "M&M.NS",
+    "ADANIENT": "ADANIENT.NS", "TATASTEEL": "TATASTEEL.NS",
+    "COLPAL": "COLPAL.NS", "COLGATE": "COLPAL.NS",
+    "NESTLEIND": "NESTLEIND.NS", "NESTLE": "NESTLEIND.NS",
+    "PIDILITIND": "PIDILITIND.NS", "PIDILITE": "PIDILITIND.NS",
+    "HAVELLS": "HAVELLS.NS", "VOLTAS": "VOLTAS.NS",
+    "ZOMATO": "ZOMATO.NS", "IRCTC": "IRCTC.NS",
+    "DMART": "DMART.NS", "TRENT": "TRENT.NS",
+    "APOLLOHOSP": "APOLLOHOSP.NS", "APOLLO": "APOLLOHOSP.NS",
+    "LICI": "LICI.NS", "LIC": "LICI.NS",
+    "RVNL": "RVNL.NS", "IRFC": "IRFC.NS",
+    "PFC": "PFC.NS", "RECLTD": "RECLTD.NS", "REC": "RECLTD.NS",
+    "COALINDIA": "COALINDIA.NS", "COAL": "COALINDIA.NS",
+    "BRITANNIA": "BRITANNIA.NS", "CIPLA": "CIPLA.NS",
+    "DRREDDY": "DRREDDY.NS", "DIVISLAB": "DIVISLAB.NS",
+    "BANDHANBNK": "BANDHANBNK.NS", "YESBANK": "YESBANK.NS",
+    "POLYCAB": "POLYCAB.NS", "PFC": "PFC.NS",
 }
 
+# ── HELPERS ──
+def ist_now():
+    return datetime.now(pytz.timezone("Asia/Kolkata"))
+
 def is_market_open():
-    ist = pytz.timezone("Asia/Kolkata")
-    now = datetime.now(ist)
+    now = ist_now()
     return (now.weekday() < 5 and time(9,15) <= now.time() <= time(15,30)), now
 
 def compute_rsi(series, period=14):
@@ -61,6 +85,20 @@ def compute_bollinger(series, period=20):
     sma = series.rolling(period).mean()
     std = series.rolling(period).std()
     return sma + 2*std, sma, sma - 2*std
+
+def get_live_price(symbol):
+    """Get current live price for any stock"""
+    try:
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="1d", interval="1m")
+        if not data.empty:
+            return round(data["Close"].iloc[-1], 2)
+        data = ticker.history(period="2d", interval="5m")
+        if not data.empty:
+            return round(data["Close"].iloc[-1], 2)
+    except Exception:
+        pass
+    return None
 
 def analyze_stock(symbol):
     try:
@@ -128,16 +166,8 @@ def call_groq(messages):
     try:
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "llama-3.1-8b-instant",
-                "messages": messages,
-                "max_tokens": 2000,
-                "temperature": 0.3,
-            },
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={"model": "llama-3.1-8b-instant", "messages": messages, "max_tokens": 2000, "temperature": 0.3},
             timeout=60
         )
         result = response.json()
@@ -147,269 +177,220 @@ def call_groq(messages):
     except Exception as e:
         return f"Error: {str(e)}"
 
-def get_main_recommendation(investment_amount, top_stocks, etf_data, nifty_price, nifty_change, instrument_pref, risk_level):
+def get_market_time_context():
+    now = ist_now()
+    h = now.hour
+    m = now.minute
+    if h < 9 or (h == 9 and m < 15):
+        return "बाजार उघडण्यापूर्वी (Pre-market)", "आज कोणते trade घ्यायचे ते plan करा"
+    elif h == 9 and m < 30:
+        return "बाजार नुकताच उघडला (Opening)", "opening volatility आहे — 9:30 नंतर trade घ्या"
+    elif h < 11:
+        return "सकाळचे trading (Morning)", "momentum trades साठी चांगला वेळ"
+    elif h < 13:
+        return "दुपारचे trading (Midday)", "trend follow करा"
+    elif h < 14:
+        return "दुपार नंतर (Afternoon)", "existing positions manage करा"
+    elif h < 15:
+        return "बाजार बंद होण्यापूर्वी (Pre-close)", "intraday positions close करा — 3:20 पर्यंत exit करा"
+    else:
+        return "बाजार बंद (After market)", "उद्यासाठी plan करा"
+
+def get_main_recommendation(investment_amount, top_stocks, nifty_price, nifty_change, instrument_pref, risk_level):
     stocks_text = ""
     for s in top_stocks[:5]:
         stocks_text += f"- {s['symbol'].replace('.NS','')}: ₹{s['price']}, बदल {s['change_pct']}%, RSI {s['rsi']}, Score {s['score']}, Signals: {', '.join(s['signals'][:3])}\n"
 
-    etf_text = ""
-    for name, data in etf_data.items():
-        if data:
-            etf_text += f"- {name}: ₹{data['price']}, बदल {data['change_pct']}%, RSI {data['rsi']}\n"
-
     trend = "तेजी" if nifty_change and nifty_change > 0.3 else "मंदी" if nifty_change and nifty_change < -0.3 else "तटस्थ"
+    today = ist_now().strftime("%d %B %Y")
+    weekday = ist_now().strftime("%A")
+    market_time, time_advice = get_market_time_context()
 
-    # Today's date for AI context
-    from datetime import datetime
-    import pytz
-    ist = pytz.timezone("Asia/Kolkata")
-    today = datetime.now(ist).strftime("%d %B %Y")
-    weekday = datetime.now(ist).strftime("%A")
-
-    # Instrument specific format
     if "F&O" in instrument_pref:
-        format_instructions = """खालील exact format मध्ये F&O trade सुचवा:
+        format_text = f"""F&O Options trade सुचवा:
 
-📊 आजचे बाजाराचे विश्लेषण:
-[2-3 वाक्ये]
-
-🎯 आजची सर्वोत्तम F&O संधी: [NIFTY/BANKNIFTY/STOCK NAME]
+🎯 आजची सर्वोत्तम F&O संधी: [STOCK/INDEX]
 प्रकार: Call Option किंवा Put Option
 Strike Price: ₹[number]
-Expiry: [date]
+Expiry: [nearest expiry date after {today}]
 
-💰 गुंतवणूक योजना (₹AMOUNT साठी):
-- Option Premium: ₹[number] per share
-- Lot Size: [number] shares per lot
-- Lots घ्यायचे: [number] lots
-- एकूण गुंतवणूक: ₹[number]
-- Target Premium: ₹[number]
-- Stop Loss Premium: ₹[number]
-- अपेक्षित नफा: ₹[number]
-- जास्तीत जास्त तोटा: ₹[number]
+💰 ₹{investment_amount:,} साठी plan:
+- Option Premium: ₹[number]
+- Lot Size: [number]
+- Lots: [number] (₹{investment_amount:,} मध्ये येतील इतकेच)
+- एकूण खर्च: ₹[number]
+- Target Premium: ₹[number] (₹500 नफ्यासाठी)
+- Stop Loss: ₹[number]
+- अपेक्षित नफा: ₹500+
+- जोखीम: ₹[max loss]"""
+    elif "ETF" in instrument_pref:
+        format_text = f"""ETF trade सुचवा:
+
+🎯 ETF: [NAME]
+💰 ₹{investment_amount:,} साठी plan:
+- खरेदी किंमत: ₹[number]
+- Quantity: [number] units
+- Target 1: ₹[number]
+- Target 2: ₹[number]
+- Stop Loss: ₹[number]
+- अपेक्षित नफा: ₹500+"""
+    else:
+        format_text = f"""Stock Intraday trade सुचवा:
+
+🎯 Stock: [NAME]
+💰 ₹{investment_amount:,} साठी plan:
+- खरेदी किंमत: ₹[number]
+- Quantity: [number] shares (₹{investment_amount:,} मध्ये येतील इतकेच)
+- Target 1: ₹[number]
+- Target 2: ₹[number]
+- Stop Loss: ₹[number]
+- अपेक्षित नफा: ₹500+ (25%+ return)
+- जोखीम: ₹[max loss]"""
+
+    prompt = f"""तुम्ही तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. फक्त मराठीत उत्तर द्या.
+
+आजची तारीख: {today} ({weekday})
+बाजार वेळ: {market_time} — {time_advice}
+Nifty 50: ₹{nifty_price} ({nifty_change}%), कल = {trend}
+उपलब्ध रक्कम: फक्त ₹{investment_amount:,} (जास्त नाही)
+लक्ष्य: ₹500 नफा
+जोखीम: {risk_level}
+
+Top Stocks (live scan):
+{stocks_text}
+
+📊 आजचे बाजाराचे विश्लेषण:
+[2-3 वाक्ये - आज बाजार कसा आहे, {market_time} नुसार काय करावे]
+
+{format_text}
 
 📈 तांत्रिक कारणे:
 • RSI: [explain]
-• MACD: [explain]
-• OI/Volume: [explain]
+• MACD: [explain]  
+• Volume: [explain]
 • Support/Resistance: [explain]
 
 ⏰ वेळ:
-- प्रवेश वेळ: [time]
-- बाहेर पडा: [time]
+- प्रवेश: [best entry time today]
+- Exit: [exit time — intraday असेल तर 3:15 पूर्वी]
 
-⚠️ सावधगिरी: F&O मध्ये जास्त जोखीम असते. सावधगिरीने invest करा."""
+⚠️ सावधगिरी: [1 line]"""
 
-    elif "ETF" in instrument_pref:
-        format_instructions = """खालील exact format मध्ये ETF trade सुचवा:
-
-📊 आजचे बाजाराचे विश्लेषण:
-[2-3 वाक्ये]
-
-🎯 आजची सर्वोत्तम ETF संधी: [ETF NAME]
-प्रकार: ETF Intraday
-
-💰 गुंतवणूक योजना (₹AMOUNT साठी):
-- खरेदी किंमत: ₹[number]
-- प्रमाण (Quantity): [number] units
-- एकूण गुंतवणूक: ₹[number]
-- लक्ष्य किंमत 1: ₹[number]
-- लक्ष्य किंमत 2: ₹[number]
-- स्टॉप लॉस: ₹[number]
-- अपेक्षित नफा: ₹[number]
-- जास्तीत जास्त तोटा: ₹[number]
-
-📈 तांत्रिक कारणे:
-• RSI: [explain]
-• MACD: [explain]
-• Volume: [explain]
-• Trend: [explain]
-
-⏰ वेळ:
-- प्रवेश वेळ: [time]
-- बाहेर पडा: [time]
-
-⚠️ सावधगिरी: [warning]"""
-
-    else:
-        format_instructions = """खालील exact format मध्ये Stock Intraday trade सुचवा:
-
-📊 आजचे बाजाराचे विश्लेषण:
-[2-3 वाक्ये]
-
-🎯 आजची सर्वोत्तम संधी: [STOCK NAME]
-प्रकार: Stock Intraday
-
-💰 गुंतवणूक योजना (₹AMOUNT साठी):
-- खरेदी किंमत: ₹[number]
-- प्रमाण (Quantity): [number] shares
-- एकूण गुंतवणूक: ₹[number]
-- लक्ष्य किंमत 1: ₹[number]
-- लक्ष्य किंमत 2: ₹[number]
-- स्टॉप लॉस: ₹[number]
-- अपेक्षित नफा: ₹[number]
-- जास्तीत जास्त तोटा: ₹[number]
-
-📈 तांत्रिक कारणे:
-• RSI: [explain]
-• MACD: [explain]
-• Volume: [explain]
-• Support: [explain]
-
-⏰ वेळ:
-- प्रवेश वेळ: [time]
-- बाहेर पडा: [time]
-
-⚠️ सावधगिरी: [warning]"""
-
-    format_instructions = format_instructions.replace("₹AMOUNT", f"₹{investment_amount:,}")
-
-    prompt = f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. फक्त मराठीत उत्तर द्या.
-
-आजची तारीख: {today} ({weekday})
-बाजार: Nifty 50 = ₹{nifty_price} ({nifty_change}%), कल = {trend}
-गुंतवणूकदार: रक्कम = ₹{investment_amount:,}, जोखीम = {risk_level}, प्राधान्य = {instrument_pref}
-
-Top Stocks (Nifty 50 + Bank Nifty):
-{stocks_text}
-ETFs:
-{etf_text}
-
-{format_instructions}"""
-
-    messages = [
-        {"role": "system", "content": "You are an expert Indian stock market analyst. Always respond in Marathi language only. Give specific actionable recommendations with exact numbers."},
+    return call_groq([
+        {"role": "system", "content": "Expert Indian stock market analyst. Always respond in Marathi only. Give exact numbers. Today's goal: ₹500 profit from given investment amount."},
         {"role": "user", "content": prompt}
-    ]
-    return call_groq(messages)
+    ])
 
 def get_chat_response(user_question, investment_amount, nifty_price, nifty_change, chat_history):
-    # Try to extract stock symbol from question
-    question_upper = user_question.upper()
     stock_data_text = ""
+    question_upper = user_question.upper()
 
-    # Check if user mentioned a known stock
-    common_stocks = {
-        "RELIANCE": "RELIANCE.NS", "TCS": "TCS.NS", "HDFCBANK": "HDFCBANK.NS",
-        "ICICIBANK": "ICICIBANK.NS", "INFY": "INFY.NS", "SBIN": "SBIN.NS",
-        "NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK", "KOTAKBANK": "KOTAKBANK.NS",
-        "AXISBANK": "AXISBANK.NS", "LT": "LT.NS", "TITAN": "TITAN.NS",
-        "WIPRO": "WIPRO.NS", "BAJFINANCE": "BAJFINANCE.NS", "MARUTI": "MARUTI.NS",
-        "TATAMOTORS": "TATAMOTORS.NS", "ONGC": "ONGC.NS", "NTPC": "NTPC.NS",
-        "SHRIRAMFIN": "SHRIRAMFIN.NS", "HINDALCO": "HINDALCO.NS",
-        "BAJAJFINSV": "BAJAJFINSV.NS", "INDUSINDBK": "INDUSINDBK.NS",
-        "HCLTECH": "HCLTECH.NS", "SUNPHARMA": "SUNPHARMA.NS",
-        "BHARTIARTL": "BHARTIARTL.NS", "ITC": "ITC.NS", "M&M": "M&M.NS",
-        "ADANIENT": "ADANIENT.NS", "TATASTEEL": "TATASTEEL.NS",
-    }
-
-    for stock_name, symbol in common_stocks.items():
+    # Detect stocks mentioned and get live prices
+    detected_stocks = []
+    for stock_name, symbol in STOCK_MAP.items():
         if stock_name in question_upper:
+            price = get_live_price(symbol)
             data = analyze_stock(symbol)
-            if data:
-                stock_data_text = f"""
-{stock_name} चा live data:
-- किंमत: ₹{data['price']}
-- बदल: {data['change_pct']}%
-- RSI: {data['rsi']}
-- MACD: {'Bullish' if data['macd'] > data['macd_signal'] else 'Bearish'}
-- Volume: {data['vol_surge']}x average
-- Score: {data['score']}/10
-- Signals: {', '.join(data['signals'])}
-"""
-            break
+            if price or data:
+                actual_price = price or (data['price'] if data else 'N/A')
+                stock_data_text += f"\n{stock_name} live data:\n"
+                stock_data_text += f"- Current Price: ₹{actual_price}\n"
+                if data:
+                    stock_data_text += f"- RSI: {data['rsi']}\n"
+                    stock_data_text += f"- MACD: {'Bullish' if data['macd'] > data['macd_signal'] else 'Bearish'}\n"
+                    stock_data_text += f"- Volume: {data['vol_surge']}x average\n"
+                    stock_data_text += f"- Bollinger: Upper ₹{data['upper_bb']}, Lower ₹{data['lower_bb']}\n"
+                    stock_data_text += f"- Score: {data['score']}/10\n"
+                detected_stocks.append(stock_name)
 
-    # Build messages with history
+    today = ist_now().strftime("%d %B %Y")
+    market_time, time_advice = get_market_time_context()
+
     messages = [
-        {"role": "system", "content": f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. 
-फक्त मराठीत उत्तर द्या. उत्तर concise आणि specific ठेवा - जास्त repeat करू नका.
-आजची तारीख: {datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%d %B %Y")}
-गुंतवणूकदाराची रक्कम: ₹{investment_amount:,}
-Nifty 50: ₹{nifty_price} ({nifty_change}%)
+        {"role": "system", "content": f"""तुम्ही तज्ञ भारतीय शेअर बाजार विश्लेषक आहात.
+फक्त मराठीत उत्तर द्या. Concise आणि specific उत्तर द्या.
+आजची तारीख: {today}
+बाजार वेळ: {market_time}
+गुंतवणूक: ₹{investment_amount:,}
+Nifty: ₹{nifty_price} ({nifty_change}%)
 {stock_data_text}
-प्रत्येक उत्तरात exact numbers द्या - buy price, target, stop loss, quantity.
-उत्तर जास्तीत जास्त 150 words मध्ये द्या."""}
+Exact numbers द्या. Hold/Exit decisions साठी current price वापरा."""}
     ]
 
-    # Add only last 4 messages for context (avoid repetition)
     for msg in chat_history[-4:]:
         messages.append(msg)
-
-    # Add current question
     messages.append({"role": "user", "content": user_question})
 
     return call_groq(messages)
 
-# MAIN UI
+# ── MAIN UI ──
 st.title("📈 Shreya's AI Stock Advisor")
-st.caption("Nifty 50 + Bank Nifty संपूर्ण स्कॅन → आजची सर्वोत्तम संधी → मराठीत सल्ला")
+st.caption("रोज ₹2,000 → ₹500 नफा | Nifty 50 + F&O + Bank Nifty स्कॅन | मराठीत सल्ला")
 
 market_open, now_ist = is_market_open()
+market_time_label, time_advice = get_market_time_context()
+
 if market_open:
-    st.success(f"🟢 बाजार उघडा आहे | {now_ist.strftime('%d %b %Y, %I:%M %p')} IST")
+    st.success(f"🟢 बाजार उघडा | {now_ist.strftime('%d %b %Y, %I:%M %p')} IST | {market_time_label}")
 else:
-    st.warning(f"🔴 बाजार बंद आहे | {now_ist.strftime('%d %b %Y, %I:%M %p')} IST")
+    st.warning(f"🔴 {market_time_label} | {now_ist.strftime('%d %b %Y, %I:%M %p')} IST")
+    st.info(f"💡 {time_advice}")
 
 st.divider()
 
-# Initialize session state
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "nifty_price" not in st.session_state:
-    st.session_state.nifty_price = None
+    st.session_state.nifty_price = 24000
 if "nifty_change" not in st.session_state:
-    st.session_state.nifty_change = None
+    st.session_state.nifty_change = 0
 
 with st.sidebar:
     st.header("⚙️ तुमची माहिती")
-    investment_amount = st.number_input("💰 आजची गुंतवणूक रक्कम (₹)", min_value=1000, max_value=1000000, value=10000, step=1000)
+    investment_amount = st.number_input("💰 आजची रक्कम (₹)", min_value=1000, max_value=500000, value=2000, step=500)
     instrument_pref = st.selectbox("📊 कोणत्या प्रकारात?", ["AI ठरवू दे (Best opportunity)", "Stock (Intraday)", "ETF", "F&O (Options)"])
-    risk_level = st.select_slider("⚡ जोखीम पातळी", options=["कमी (Conservative)", "मध्यम (Moderate)", "जास्त (Aggressive)"], value="मध्यम (Moderate)")
+    risk_level = st.select_slider("⚡ जोखीम", options=["कमी", "मध्यम", "जास्त"], value="मध्यम")
     st.divider()
-    st.info(f"**Investment:** ₹{investment_amount:,}\n\n**Type:** {instrument_pref}\n\n**Risk:** {risk_level}")
+    st.success(f"**रक्कम:** ₹{investment_amount:,}\n\n**लक्ष्य नफा:** ₹500")
     analyze_btn = st.button("🔍 आजचे विश्लेषण सुरू करा", type="primary", use_container_width=True)
     if st.button("🗑️ Chat साफ करा", use_container_width=True):
         st.session_state.chat_history = []
         st.rerun()
 
-# ── MAIN SCAN SECTION ──
+# ── SCAN SECTION ──
 if analyze_btn:
-    st.subheader("📊 Step 1: बाजार स्थिती तपासत आहे...")
+    st.subheader("📊 बाजार स्थिती...")
     nifty_price, nifty_change = get_nifty_data()
-    st.session_state.nifty_price = nifty_price
-    st.session_state.nifty_change = nifty_change
+    st.session_state.nifty_price = nifty_price or 24000
+    st.session_state.nifty_change = nifty_change or 0
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Nifty 50", f"₹{nifty_price:,}" if nifty_price else "N/A", f"{nifty_change}%" if nifty_change else "")
     with col2:
         sentiment = "🟢 तेजी" if (nifty_change and nifty_change > 0.3) else "🔴 मंदी" if (nifty_change and nifty_change < -0.3) else "🟡 तटस्थ"
         st.metric("बाजार कल", sentiment)
     with col3:
-        st.metric("गुंतवणूक", f"₹{investment_amount:,}")
+        st.metric("तुमची रक्कम", f"₹{investment_amount:,}")
+    with col4:
+        st.metric("लक्ष्य नफा", "₹500")
 
-    st.subheader("🔍 Step 2: Nifty 50 + Bank Nifty स्कॅन होत आहे...")
+    st.subheader("🔍 Stocks स्कॅन होत आहे...")
     progress_bar = st.progress(0)
     status_text = st.empty()
 
-    all_symbols = list(set(NIFTY50 + BANK_NIFTY))
+    all_symbols = list(set(SCAN_STOCKS))
     results = []
     for i, sym in enumerate(all_symbols):
         status_text.text(f"Scanning {sym.replace('.NS','')}...")
-        progress_bar.progress((i + 1) / len(all_symbols) * 0.75)
+        progress_bar.progress((i + 1) / len(all_symbols) * 0.8)
         data = analyze_stock(sym)
         if data:
             results.append(data)
 
     top_stocks = sorted(results, key=lambda x: x["score"], reverse=True)
 
-    status_text.text("ETFs तपासत आहे...")
-    etf_data = {}
-    for i, (name, symbol) in enumerate(ETFS.items()):
-        progress_bar.progress(0.75 + 0.1 * (i+1) / len(ETFS))
-        etf_data[name] = analyze_stock(symbol)
-
-    st.subheader("🏆 Top 5 सर्वोत्तम Stocks")
+    st.subheader("🏆 Top 5 आजचे Best Stocks")
     top5 = top_stocks[:5]
     if top5:
         cols = st.columns(5)
@@ -418,37 +399,35 @@ if analyze_btn:
                 st.metric(label=stock["symbol"].replace(".NS",""), value=f"₹{stock['price']}", delta=f"{stock['change_pct']}%")
                 st.caption(f"RSI: {stock['rsi']} | Score: {stock['score']}")
 
-    st.subheader("🤖 Step 3: AI सल्ला तयार होत आहे...")
+    st.subheader("🤖 AI सल्ला तयार होत आहे...")
     progress_bar.progress(0.9)
-    status_text.text("Groq AI विश्लेषण करत आहे...")
 
-    with st.spinner("Groq AI विश्लेषण करत आहे... (10-20 seconds)"):
+    with st.spinner("AI विश्लेषण करत आहे..."):
         recommendation = get_main_recommendation(
-            investment_amount, top_stocks, etf_data,
+            investment_amount, top_stocks,
             nifty_price, nifty_change, instrument_pref, risk_level
         )
 
     progress_bar.progress(1.0)
-    status_text.text("✅ विश्लेषण पूर्ण!")
+    status_text.text("✅ पूर्ण!")
 
     st.divider()
-    st.subheader("🎯 AI चा आजचा सल्ला")
+    st.subheader("🎯 आजचा Trade Plan")
     st.markdown(
         f'<div style="background:#f0f8f0;padding:24px;border-radius:12px;border-left:5px solid #28a745;font-size:16px;line-height:2.2;">{recommendation.replace(chr(10), "<br>")}</div>',
         unsafe_allow_html=True
     )
-    st.warning("⚠️ हा AI सल्ला फक्त माहितीसाठी आहे. SEBI registered advisor चा सल्ला घ्या.")
-    st.caption(f"विश्लेषण वेळ: {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d %B %Y, %I:%M %p IST')}")
+    st.warning("⚠️ हा AI सल्ला माहितीसाठी आहे. SEBI registered advisor चा सल्ला घ्या.")
+    st.caption(f"वेळ: {ist_now().strftime('%d %B %Y, %I:%M %p IST')}")
 
 else:
-    st.info("👈 डाव्या बाजूला रक्कम टाका आणि **'आजचे विश्लेषण सुरू करा'** दाबा!")
+    st.info("👈 रक्कम टाका → **'आजचे विश्लेषण सुरू करा'** दाबा → AI exact trade plan देईल!")
 
 # ── CHAT SECTION ──
 st.divider()
-st.subheader("💬 Stock विचारा — कोणताही प्रश्न")
-st.caption("उदा: 'RELIANCE F&O घेऊ का?', 'HDFCBANK आज कसा आहे?', 'आज कोणता sector strong आहे?'")
+st.subheader("💬 कोणताही प्रश्न विचारा")
+st.caption("उदा: 'COLPAL 2300 CALL HOLD करू का?' | 'RELIANCE आज कसा आहे?' | 'माझा trade profit मध्ये आहे का?'")
 
-# Show chat history
 for msg in st.session_state.chat_history:
     if msg["role"] == "user":
         with st.chat_message("user"):
@@ -457,28 +436,21 @@ for msg in st.session_state.chat_history:
         with st.chat_message("assistant"):
             st.markdown(msg["content"])
 
-# Chat input
-user_input = st.chat_input("तुमचा प्रश्न मराठीत किंवा English मध्ये विचारा...")
+user_input = st.chat_input("तुमचा प्रश्न इथे लिहा...")
 
 if user_input:
-    # Show user message
     with st.chat_message("user"):
         st.write(user_input)
-
-    # Add to history
     st.session_state.chat_history.append({"role": "user", "content": user_input})
 
-    # Get AI response
     with st.chat_message("assistant"):
-        with st.spinner("विचार करत आहे..."):
-            nifty_p = st.session_state.nifty_price or 24000
-            nifty_c = st.session_state.nifty_change or 0
+        with st.spinner("Live data बघत आहे..."):
             response = get_chat_response(
                 user_input, investment_amount,
-                nifty_p, nifty_c,
+                st.session_state.nifty_price,
+                st.session_state.nifty_change,
                 st.session_state.chat_history[:-1]
             )
         st.markdown(response)
 
-    # Add assistant response to history
     st.session_state.chat_history.append({"role": "assistant", "content": response})
