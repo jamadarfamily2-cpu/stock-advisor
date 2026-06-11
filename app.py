@@ -321,12 +321,9 @@ def get_chat_response(user_question, investment_amount, nifty_price, nifty_chang
 
     # Build messages with history
     messages = [
-        from datetime import datetime
-        import pytz
-        today_str = datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%d %B %Y")
         {"role": "system", "content": f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. 
 फक्त मराठीत उत्तर द्या. उत्तर concise आणि specific ठेवा - जास्त repeat करू नका.
-आजची तारीख: {today_str}
+आजची तारीख: {datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%d %B %Y")}
 गुंतवणूकदाराची रक्कम: ₹{investment_amount:,}
 Nifty 50: ₹{nifty_price} ({nifty_change}%)
 {stock_data_text}
