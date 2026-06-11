@@ -159,6 +159,13 @@ def get_main_recommendation(investment_amount, top_stocks, etf_data, nifty_price
 
     trend = "तेजी" if nifty_change and nifty_change > 0.3 else "मंदी" if nifty_change and nifty_change < -0.3 else "तटस्थ"
 
+    # Today's date for AI context
+    from datetime import datetime
+    import pytz
+    ist = pytz.timezone("Asia/Kolkata")
+    today = datetime.now(ist).strftime("%d %B %Y")
+    weekday = datetime.now(ist).strftime("%A")
+
     # Instrument specific format
     if "F&O" in instrument_pref:
         format_instructions = """खालील exact format मध्ये F&O trade सुचवा:
@@ -259,6 +266,7 @@ Expiry: [date]
 
     prompt = f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. फक्त मराठीत उत्तर द्या.
 
+आजची तारीख: {today} ({weekday})
 बाजार: Nifty 50 = ₹{nifty_price} ({nifty_change}%), कल = {trend}
 गुंतवणूकदार: रक्कम = ₹{investment_amount:,}, जोखीम = {risk_level}, प्राधान्य = {instrument_pref}
 
@@ -313,8 +321,12 @@ def get_chat_response(user_question, investment_amount, nifty_price, nifty_chang
 
     # Build messages with history
     messages = [
+        from datetime import datetime
+        import pytz
+        today_str = datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%d %B %Y")
         {"role": "system", "content": f"""तुम्ही एक तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. 
 फक्त मराठीत उत्तर द्या. उत्तर concise आणि specific ठेवा - जास्त repeat करू नका.
+आजची तारीख: {today_str}
 गुंतवणूकदाराची रक्कम: ₹{investment_amount:,}
 Nifty 50: ₹{nifty_price} ({nifty_change}%)
 {stock_data_text}
