@@ -264,31 +264,29 @@ def get_main_recommendation(investment_amount, top_stocks, nifty_price, nifty_ch
 - ₹500 नफा कसा मिळेल"""
 
     prompt = f"""तुम्ही तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. फक्त मराठीत उत्तर द्या.
+कोणतीही section किंवा line repeat करू नका. प्रत्येक section एकदाच लिहा.
 
 आजची तारीख: {today} ({weekday})
 बाजार वेळ: {market_time} — {time_advice}
 Nifty 50: ₹{nifty_price} ({nifty_change}%), कल = {trend}
-उपलब्ध रक्कम: फक्त ₹{investment_amount:,} (जास्त नाही)
+उपलब्ध रक्कम: फक्त ₹{investment_amount:,}
 लक्ष्य: ₹500 नफा
 जोखीम: {risk_level}
 
 Top Stocks (live scan):
 {stocks_text}
 
-📊 आजचे बाजाराचे विश्लेषण:
-[2-3 वाक्ये - आज बाजार कसा आहे, {market_time} नुसार काय करावे]
-
 {format_text}
 
-📈 तांत्रिक कारणे:
+📈 तांत्रिक कारणे (प्रत्येक एकदाच):
 • RSI: [explain]
-• MACD: [explain]  
+• MACD: [explain]
 • Volume: [explain]
 • Support/Resistance: [explain]
 
 ⏰ वेळ:
-- प्रवेश: [best entry time today]
-- Exit: [exit time — intraday असेल तर 3:15 पूर्वी]
+- प्रवेश: [best entry time]
+- Exit: [3:15 पूर्वी]
 
 ⚠️ सावधगिरी: [1 line]"""
 
