@@ -167,12 +167,28 @@ def call_groq(messages):
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-            json={"model": "llama-3.1-8b-instant", "messages": messages, "max_tokens": 2000, "temperature": 0.3},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": messages,
+                "max_tokens": 800,
+                "temperature": 0.2,
+                "stop": ["---", "Note:", "Disclaimer:"]
+            },
             timeout=60
         )
         result = response.json()
         if "choices" in result:
-            return result["choices"][0]["message"]["content"]
+            text = result["choices"][0]["message"]["content"]
+            # Remove repetitive lines
+            lines = text.split("\n")
+            seen = set()
+            clean_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped and stripped not in seen:
+                    seen.add(stripped)
+                    clean_lines.append(line)
+            return "\n".join(clean_lines)
         return f"Error: {result}"
     except Exception as e:
         return f"Error: {str(e)}"
@@ -207,45 +223,45 @@ def get_main_recommendation(investment_amount, top_stocks, nifty_price, nifty_ch
     market_time, time_advice = get_market_time_context()
 
     if "F&O" in instrument_pref:
-        format_text = f"""F&O Options trade सुचवा:
+        format_text = f"""आजचे market analysis करून F&O strategy सांगा:
 
-🎯 आजची सर्वोत्तम F&O संधी: [STOCK/INDEX]
-प्रकार: Call Option किंवा Put Option
-Strike Price: ₹[number]
-Expiry: [nearest expiry date after {today}]
+📊 बाजार विश्लेषण:
+[आज market कुठे जाणार — bullish/bearish/sideways आणि का]
 
-💰 ₹{investment_amount:,} साठी plan:
-- Option Premium: ₹[number]
-- Lot Size: [number]
-- Lots: [number] (₹{investment_amount:,} मध्ये येतील इतकेच)
-- एकूण खर्च: ₹[number]
-- Target Premium: ₹[number] (₹500 नफ्यासाठी)
-- Stop Loss: ₹[number]
-- अपेक्षित नफा: ₹500+
-- जोखीम: ₹[max loss]"""
+🎯 F&O Strategy:
+- कोणता stock/index निवडावा आणि का
+- Call घ्यावा की Put आणि का
+- Strike: ITM/ATM/OTM कोणते योग्य आणि का
+- ₹{investment_amount:,} मध्ये किती lots घेता येतील (lot size सांगा)
+- Entry zone: premium range
+- Target premium (₹500 नफ्यासाठी)
+- Stop Loss premium
+- Weekly की monthly expiry योग्य आणि का"""
     elif "ETF" in instrument_pref:
-        format_text = f"""ETF trade सुचवा:
+        format_text = f"""आजचे market analysis करून ETF strategy सांगा:
 
-🎯 ETF: [NAME]
-💰 ₹{investment_amount:,} साठी plan:
-- खरेदी किंमत: ₹[number]
-- Quantity: [number] units
-- Target 1: ₹[number]
-- Target 2: ₹[number]
-- Stop Loss: ₹[number]
-- अपेक्षित नफा: ₹500+"""
+📊 बाजार विश्लेषण:
+[आज market कुठे जाणार आणि का]
+
+🎯 ETF Strategy:
+- कोणता ETF निवडावा आणि का
+- ₹{investment_amount:,} मध्ये किती units
+- Entry price zone
+- Target (₹500 नफ्यासाठी)
+- Stop Loss"""
     else:
-        format_text = f"""Stock Intraday trade सुचवा:
+        format_text = f"""आजचे market analysis करून Stock strategy सांगा:
 
-🎯 Stock: [NAME]
-💰 ₹{investment_amount:,} साठी plan:
-- खरेदी किंमत: ₹[number]
-- Quantity: [number] shares (₹{investment_amount:,} मध्ये येतील इतकेच)
-- Target 1: ₹[number]
-- Target 2: ₹[number]
-- Stop Loss: ₹[number]
-- अपेक्षित नफा: ₹500+ (25%+ return)
-- जोखीम: ₹[max loss]"""
+📊 बाजार विश्लेषण:
+[आज market कुठे जाणार आणि का]
+
+🎯 Stock Strategy:
+- कोणता stock निवडावा आणि का
+- ₹{investment_amount:,} मध्ये किती shares
+- Entry price zone
+- Target 1 आणि Target 2
+- Stop Loss
+- ₹500 नफा कसा मिळेल"""
 
     prompt = f"""तुम्ही तज्ञ भारतीय शेअर बाजार विश्लेषक आहात. फक्त मराठीत उत्तर द्या.
 
@@ -277,7 +293,7 @@ Top Stocks (live scan):
 ⚠️ सावधगिरी: [1 line]"""
 
     return call_groq([
-        {"role": "system", "content": "Expert Indian stock market analyst. Always respond in Marathi only. Give exact numbers. Today's goal: ₹500 profit from given investment amount."},
+        {"role": "system", "content": "Expert Indian stock market analyst. Always respond in Marathi only. Give exact numbers. Today's goal: ₹500 profit from given investment amount. For F&O expiry dates: DO NOT guess specific dates. Write 'nearest Thursday expiry' or 'current week expiry'. Never write a specific date unless you are 100% sure."},
         {"role": "user", "content": prompt}
     ])
 
